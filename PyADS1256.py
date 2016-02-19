@@ -1,6 +1,8 @@
-import PyBCM2835 as bcm
 import time
+import spidev
+import RPi.GPIO as gpio
 
+spi = spidev.SpiDev()
 """
 
 This is a list of the commands accepted by the ADS1256
@@ -23,11 +25,10 @@ WAKEUP Completes SYNC and Exits Standby Mode 1111 1111 (FFh)
 """
 
 # The RPI GPIO to use for chip select and ready polling
-CS                  = bcm.RPI_GPIO_P1_15 
-DRDY                = bcm.RPI_GPIO_P1_11
-SPI_BIT_ORDER       = bcm.SPI_BIT_ORDER_LSBFIRST
-SPI_MODE            = bcm.SPI_MODE1
-SPI_CLOCK_DIVIDER   = bcm.SPI_CLOCK_DIVIDER_8192
+CS                  = 15 
+DRDY                = 11
+SPI_BIT_ORDER       = True
+SPI_MODE            = 0b00
 DRDY_TIMEOUT        = 0.5 # Seconds to wait for DRDY when communicating
 DATA_TIMEOUT        = 0.00001 # 10uS delay for sending data
 SCLK_FREQUENCY      = 7680000 # default clock rate is 7.68MHz
@@ -50,8 +51,7 @@ REG_FSC1    = 9
 REG_FSC2    = 10
 
 """
-DRATE Register: A/D Data Rate Address 0x03
-The 16 valid Data Rate settings are shown below. Make sure to select a
+DRATE Register: A/D Data Rate Address 0x03 The 16 valid Data Rate settings are shown below. Make sure to select a
 valid setting as the invalid settings may produce unpredictable results.
 
 Bits 7-0 DR[7: 0]: Data Rate Setting(1)
@@ -207,28 +207,38 @@ AD_CLK_EQUAL    = 0x20
 AD_CLK_HALF     = 0x40
 AD_CLK_FOURTH   = 0x60
 
-def cs_low():
-    bcm.gpio_write(CS, bcm.LOW) 
+# SPI Bus and Device for RPi talk
+BUS = 0
+DEV = 0
 
-def cs_high():
-    bcm.gpio_write(CS, bcm.HIGH)
+def chip_select():
+    gpio.output(CS, gpio.LOW)
+
+def chip_release():
+    gpio.output(CS, gpio.HIGH)
+
 
 def init():
     """
     Initializes the - the CS line and DRDY pins must be defined
     :returns: empty string if successful, error string if unsuccessful
     """
-    retval = ""
 
-    bcm.init()
-    bcm.spi_begin()
-    bcm.spi_setBitOrder(SPI_BIT_ORDER)
-    bcm.spi_setDataMode(SPI_DATA_MODE)
-    bcm.spi_setClockDivider(SPI_CLOCK_DIVIDER)
-    bcm.gpio_fsel(CS, bcm.GPIO_FSEL_OUTP)
-    bcm.gpio_write(CS, bcm.HIGH)
-    bcm.gpio_fsel(DRDY, bcm.GPIO_FSEL_INPT)
-    bcm.gpio_set_pud(DRDY, bcm.GPIO_PUD_UP)
+    print("Initializing SPI Device")
+    spi.open(BUS, DEV)
+    spi.mode = SPI_MODE
+    spi.lsbfirst = SPI_BIT_ORDER
+    print("SPI Started")
+
+    print("Initializing GPIO:")
+    print("Setting Pin Mode to: " + str(gpio.BCM))
+    gpio.setmode(gpio.BCM)
+    print("Setting CS pin to: " + str(CS))
+    gpio.setup(CS, gpio.OUT)
+    print("Setting DRDY pin to: " + str(DRDY))
+    gpio.setup(DRDY, gpio.IN)
+    print("Initialized GPIO")
+
 
 def WaitDRDY():
     """
@@ -238,24 +248,24 @@ def WaitDRDY():
     elapsed = time.time() - start
 
     # Waits for DRDY to go to zero or TIMEOUT seconds to pass
-    while bcm.gpio_lev(DRDY) != 0 and elapsed < DRDY_TIMEOUT:
+    while gpio.input(DRDY) and elapsed < DRDY_TIMEOUT:
         elapsed = time.time() - start
 
     if elapsed >= DRDY_TIMEOUT:
         print("WaitDRDY() Timeout\r\n")
 
-def SendByte(self, cmd):
+def SendByte(self, byte):
     """
     Sends a byte to the SPI bus
     """
-    bcm.spi_transfer(cmd)
+    spi.writebytes(chr(byte))
 
 def ReadByte():
     """
     Reads a byte from the SPI bus
     :returns: byte read from the bus
     """
-    byte = bcm.spi_transfer(0xFF)
+    byte = chr(spi.readbytes(1))
     return byte
 
 def DataDelay():
@@ -305,7 +315,7 @@ def ReadReg(self, reg):
     result = []
 
     # Pull the SPI bus low
-    cs_low()
+    chip_select()
     
     # Send the byte command
     SendByte(CMD_RREG | reg)
@@ -318,7 +328,7 @@ def ReadReg(self, reg):
     read = ReadByte()
 
     # Release the SPI bus
-    cs_high()
+    chip_release()
 
     return read
 
@@ -343,7 +353,7 @@ def WriteReg(self, start_register, data):
     """
 
     # Select the ADS chip
-    cs_low()
+    chip_select()
 
     # Tell the ADS chip which register to start writing at
     SendByte(CMD_WREG | register)
@@ -355,7 +365,7 @@ def WriteReg(self, start_register, data):
     SendByte(data)
 
     # Release the ADS chip
-    cs_high()
+    chip_release()
 
 def ReadADC():
     """
@@ -372,7 +382,7 @@ def ReadADC():
     """
 
     # Pull the SPI bus low
-    cs_low()
+    chip_select()
 
     # Wait for data to be ready
     WaitDRDY()
@@ -389,7 +399,7 @@ def ReadADC():
     result.append(ReadByte())
 
     # Release the SPI bus
-    cs_high()
+    chip_release()
 
     # Concatenate the bytes
     total  = (result[0] << 16)
