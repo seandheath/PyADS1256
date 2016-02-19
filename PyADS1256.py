@@ -9,6 +9,12 @@ class
     SPI_BIT_ORDER       = bcm.SPI_BIT_ORDER_LSBFIRST
     SPI_MODE            = bcm.SPI_MODE1
     SPI_CLOCK_DIVIDER   = bcm.SPI_CLOCK_DIVIDER_8192
+    DRDY_TIMEOUT        = 0.5 # Seconds to wait for DRDY when communicating
+    DATA_TIMEOUT        = 0.00001 # 10uS delay for sending data
+
+    # ADS Chip State
+    CURRENT_GAIN    = -1
+    CURRENT_DRATE   = -1
 
     # Register definitions
     REG_STATUS  = 0
@@ -85,13 +91,158 @@ class
         bcm.gpio_fsel(self.DRDY, bcm.GPIO_FSEL_INPT)
         bcm.gpio_set_pud(self.DRDY, bcm.GPIO_PUD_UP)
 
+    def WaitDRDY(self):
+        """
+        Delays until DRDY line goes low, allowing for automatic calibration
+        """
+        start = time.time()
+        elapsed = time.time() - start
+
+        # Waits for DRDY to go to zero or TIMEOUT seconds to pass
+        while bcm.gpio_lev(self.DRDY) != 0 and elapsed < self.DRDY_TIMEOUT:
+            elapsed = time.time() - start
+
+        if elapsed >= self.DRDY_TIMEOUT:
+            print("WaitDRDY() Timeout\r\n")
+
+    def SendByte(self, cmd):
+        """
+        Sends a byte to the indicated command register of the ads chip
+        """
+        bcm.spi_transfer(cmd)
+
+    def ReadByte(self):
+        """
+        Reads a byte from the SPI bus
+        :returns: byte read from the bus
+        """
+        byte = bcm.spi_transfer(0xFF)
+        return byte
+
+    def DataDelay(self):
+        """
+        Delay from last SCLK edge to first SCLK rising edge
+        """
+        start = time.time()
+        elapsed = time.time() - start
+
+        # Wait for TIMEOUT to elapse
+        while elapsed < self.DATA_TIMEOUT:
+            elapsed = time.time() - start
+    
+
+    def ReadReg(self, reg):
+        """
+        Read the provided register
+        :returns: the contents of the provided register
+        """
+
+        result = []
+
+        # Pull the SPI bus low
+        bcm.gpio_write(self.CS, bcm.LOW)
+        
+        # Send the byte command
+        self.SendByte(self.CMD_RREG | reg)
+
+        # Clear the bus
+        self.SendByte(0x00)
+        self.DataDelay()
+
+        # Read the register contents
+        read = self.ReadByte()
+
+        # Release the SPI bus
+        bcm.gpio_write(self.CS, bcm.HIGH)
+
+        return read
+
+    def ReadData(self):
+        """
+        Reads ADC data
+        """
+
+        # Pull the SPI bus low
+        bcm.gpio_write(self.CS, bcm.LOW)
+
+        # Send the read command
+        self.SendByte(self.CMD_RDATA)
+        self.DataDelay()
+
+        # The result is 24 bits
+        result.append(self.ReadByte())
+        result.append(self.ReadByte())
+        result.append(self.ReadByte())
+
+        # Release the SPI bus
+        bcm.gpio_write(self.CS, bcm.HIGH)
+
+        # Concatenate the bytes
+        total = result[0] << 16
+        total |= result[1] << 8
+        total |= result[2]
+
+        return total
+
+    def CfgADC(self, gain, data_rate):
+        """
+        Configures the gain and data rate of the ADS chip
+        
+        Status Register:
+        Bit 0: DRDY - Data Ready
+
+            Read only
+
+        Bit 1: BUFEN - Analog Input Buffer Enable
+
+            0 = Buffer disabled (default)
+            1 = Buffer enabled
+
+        Bit 2: ACAL - Auto-calibrate
+
+            0 = Auto-calibration disabled (default)
+            1 = Auto-calibration enabled
+            
+            When auto-calibration is enabled self-calibration begins at the
+            completion of the WREG command that changes the PGA (bits 0-2 of
+            ADCON register), DR (bits 7-0 in the DRATE register), or BUFEN
+            (bit 1 of the STATUS register) values.
+
+        Bit 3: ORDER - Data Output Bit Order
+            
+            0 = Most significant bit first (default)
+            1 = Least significant bit first
+
+            Input data is always shifted in most significant byte and bit
+            first. Output data is always shifted out most significant byte
+            first. The ORDER bit controls the bit order of the output data
+            within the byte.
+
+        Bits 4-7: ID0, ID1, ID2, ID3 - Factory Programmed ID Bits
+
+            Read only
 
 
-    def ads_ReadID():
-        return ads_ReadReg(
+        """
+        self.CURRENT_GAIN = gain
+        self.CURRENT_DRATE = data_rate
+
+        self.WaitDRDY()
+        
+
+        # Disable the internal buffer
+        parameter1 = 0
+        parameter1 = 1 << 2 # ORDER
+
+        
 
 
 
-
-    if __name__ == "__main__":
-        main()
+    def ReadID(self):
+        """
+        Read the ID from the ADS chip
+        :returns: numeric identifier of the ADS chip
+        """
+        self.WaitDRDY()
+        id = ReadReg(self.REG_STATUS)
+        return id >> 4
