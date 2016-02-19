@@ -1,8 +1,8 @@
 import time
 import spidev
-import RPi.GPIO as gpio
+import RPi.GPIO as GPIO
 
-spi = spidev.SpiDev()
+spi = null
 """
 
 This is a list of the commands accepted by the ADS1256
@@ -212,10 +212,10 @@ BUS = 0
 DEV = 0
 
 def chip_select():
-    gpio.output(CS, gpio.LOW)
+    GPIO.output(CS, GPIO.LOW)
 
 def chip_release():
-    gpio.output(CS, gpio.HIGH)
+    GPIO.output(CS, GPIO.HIGH)
 
 
 def init():
@@ -225,18 +225,19 @@ def init():
     """
 
     print("Initializing SPI Device")
+    spi = spidev.SpiDev()
     spi.open(BUS, DEV)
     spi.mode = SPI_MODE
     spi.lsbfirst = SPI_BIT_ORDER
     print("SPI Started")
 
     print("Initializing GPIO:")
-    print("Setting Pin Mode to: " + str(gpio.BCM))
-    gpio.setmode(gpio.BCM)
+    print("Setting Pin Mode to: " + str(GPIO.PI))
+    GPIO.setmode(GPIO.BCM)
     print("Setting CS pin to: " + str(CS))
-    gpio.setup(CS, gpio.OUT)
+    GPIO.setup(CS, GPIO.OUT)
     print("Setting DRDY pin to: " + str(DRDY))
-    gpio.setup(DRDY, gpio.IN)
+    GPIO.setup(DRDY, GPIO.IN)
     print("Initialized GPIO")
 
 
@@ -248,7 +249,7 @@ def WaitDRDY():
     elapsed = time.time() - start
 
     # Waits for DRDY to go to zero or TIMEOUT seconds to pass
-    while gpio.input(DRDY) and elapsed < DRDY_TIMEOUT:
+    while GPIO.input(DRDY) and elapsed < DRDY_TIMEOUT:
         elapsed = time.time() - start
 
     if elapsed >= DRDY_TIMEOUT:
