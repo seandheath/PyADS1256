@@ -1,8 +1,6 @@
 import time
-import spidev
-import RPi.GPIO as gpio
+import wiringpi2
 
-spi = spidev.SpiDev()
 """
 
 This is a list of the commands accepted by the ADS1256
@@ -208,14 +206,15 @@ AD_CLK_HALF     = 0x40
 AD_CLK_FOURTH   = 0x60
 
 # SPI Bus and Device for RPi talk
+spi = spidev.SpiDev()
 BUS = 0
-DEV = 0
+DEV = 1
 
 def chip_select():
-    gpio.output(CS, gpio.LOW)
+    spi.open(BUS, DEV)
 
 def chip_release():
-    gpio.output(CS, gpio.HIGH)
+    spi.close()
 
 
 def init():
@@ -223,21 +222,10 @@ def init():
     Initializes the - the CS line and DRDY pins must be defined
     :returns: empty string if successful, error string if unsuccessful
     """
-
-    print("Initializing SPI Device")
-    spi.open(BUS, DEV)
     spi.mode = SPI_MODE
-    spi.lsbfirst = SPI_BIT_ORDER
-    print("SPI Started")
 
-    print("Initializing GPIO:")
-    print("Setting Pin Mode to: " + str(gpio.BCM))
-    gpio.setmode(gpio.BCM)
-    print("Setting CS pin to: " + str(CS))
-    gpio.setup(CS, gpio.OUT)
-    print("Setting DRDY pin to: " + str(DRDY))
+    gpio.setmode(gpio.BOARD)
     gpio.setup(DRDY, gpio.IN)
-    print("Initialized GPIO")
 
 
 def WaitDRDY():
@@ -254,7 +242,7 @@ def WaitDRDY():
     if elapsed >= DRDY_TIMEOUT:
         print("WaitDRDY() Timeout\r\n")
 
-def SendByte(self, byte):
+def SendByte(byte):
     """
     Sends a byte to the SPI bus
     """
@@ -265,7 +253,7 @@ def ReadByte():
     Reads a byte from the SPI bus
     :returns: byte read from the bus
     """
-    byte = chr(spi.readbytes(1))
+    byte = spi.readbytes(1)
     return byte
 
 def DataDelay():
@@ -290,7 +278,7 @@ def DataDelay():
         elapsed = time.time() - start
 
 
-def ReadReg(self, reg):
+def ReadReg(reg):
     """
     Read the provided register, implements:
     
@@ -332,7 +320,7 @@ def ReadReg(self, reg):
 
     return read
 
-def WriteReg(self, start_register, data):
+def WriteReg(start_register, data):
     """
     Writes data to the register, implements: 
     
