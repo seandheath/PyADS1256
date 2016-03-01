@@ -1,6 +1,7 @@
 import time
 import wiringpi2 as wp
 
+
 class ADS1256:
     """ Wiring Diagram
      +-----+-----+---------+------+---+---Pi 2---+---+------+---------+-----+-----+
@@ -47,33 +48,34 @@ class ADS1256:
     RESET Reset to Power-Up Values 1111 1110 (FEh)
     WAKEUP Completes SYNC and Exits Standby Mode 1111 1111 (FFh)
     """
-    INPUT = 0
-    OUTPUT = 1
-
 
     SPI_BIT_ORDER       = True
-    SPI_MODE            = 0b00
+    SPI_MODE            = 0
+    SPI_FREQUENCY       = 244000 # frequency suggested on pg6 of the data
+                                 # sheet (SCLK period min 4 max 10 of base
+                                 # clock, which is 7.68MHz)
     DRDY_TIMEOUT        = 0.5 # Seconds to wait for DRDY when communicating
     DATA_TIMEOUT        = 0.00001 # 10uS delay for sending data
-    SCLK_FREQUENCY      = 7680000 # default clock rate is 7.68MHz
+    FCLK_FREQUENCY      = 7680000 # default clock rate is 7.68MHz
 
     # ADS Chip State
     CURRENT_GAIN    = -1
     CURRENT_DRATE   = -1
 
     # Register addresses
-    REG_STATUS  = 0
-    REG_MUX     = 1
-    REG_ADCON   = 2
-    REG_DRATE   = 3
-    REG_IO      = 4
-    REG_OFC0    = 5
-    REG_OFC1    = 6
-    REG_OFC2    = 7
-    REG_FSC0    = 8 
-    REG_FSC1    = 9
-    REG_FSC2    = 10
-=======
+    REG_STATUS  = 0x00
+    REG_MUX     = 0x01
+    REG_ADCON   = 0x02
+    REG_DRATE   = 0x03
+    REG_IO      = 0x04
+    REG_OFC0    = 0x05
+    REG_OFC1    = 0x06
+    REG_OFC2    = 0x07
+    REG_FSC0    = 0x08 
+    REG_FSC1    = 0x09
+    REG_FSC2    = 0x010
+    NUM_REG     = 11 
+    
 import spidev
 import RPi.GPIO as GPIO
 
@@ -437,32 +439,31 @@ AD_SDCS_10uA    = 0x18
     AD_CLK_FOURTH   = 0x60
 
     # The RPI GPIO to use for chip select and ready polling
-    def __init__(self, drdy=11, reset=12, pdwn=13, cs=15)
+    def __init__(self)
         # Set up the wiringpi object to use physical pin numbers
         wp.wiringPiSetupPhys()
 
         # Initialize the DRDY pin
-        DRDY_PIN            = 11
-        wp.pinMode(DRDY_PIN, self.INPUT)
+        wp.pinMode(self.DRDY_PIN, wp.INPUT)
 
         # Initialize the reset pin
-        RESET_PIN           = 12
-        wp.pinMode(RESET_PIN, self.OUTPUT)
+        wp.pinMode(self.RESET_PIN, wp.OUTPUT)
 
         # Initialize PDWN pin
-        PDWN_PIN            = 13
-        wp.pinMode(PDWN_PIN, OUTPUT)
+        wp.pinMode(self.PDWN_PIN, wp.OUTPUT)
 
         # Initialize CS pin
-        CS_PIN              = 15
-        wp.pinMode(CS_PIN, OUTPUT)
+        wp.pinMode(self.CS_PIN, wp.OUTPUT)
+
+        # Initialize SPI
+        wp.wiringpiSPISetup(self.SPI_CHANNEL, self.SPI_FREQUENCY)
 
 
     def chip_select(self):
-        wiringpi2.
+        wp.digitalWrite(CS_PIN, wp.LOW)
 
     def chip_release(self):
-        spi.close()
+        wp.digitalWrite(CS_PIN, wp.HIGH)
 
     def WaitDRDY(self):
         """
@@ -479,11 +480,11 @@ AD_SDCS_10uA    = 0x18
         if elapsed >= DRDY_TIMEOUT:
             print("WaitDRDY() Timeout\r\n")
 
-    def SendByte(self, byte):
+    def SendByte(self, data, size):
         """
         Sends a byte to the SPI bus
         """
-        spi.writebytes(chr(byte))
+        wp.wiringPiSPIDataR
 
     def ReadByte(self):
         """
@@ -538,11 +539,11 @@ AD_SDCS_10uA    = 0x18
         result = []
 
         # Pull the SPI bus low
-        chip_select()
+        self.chip_select()
         
         # Send the byte command
-        SendByte(CMD_RREG | reg)
-        SendByte(0x00)
+        self.SendByte(CMD_RREG | start_reg)
+        self.SendByte(num_to_read)
 
         # Wait for appropriate data delay
         DataDelay()
