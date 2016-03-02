@@ -29,259 +29,41 @@ class ADS1256:
      +-----+-----+---------+------+---+----++----+---+------+---------+-----+-----+
      | BCM | wPi |   Name  | Mode | V | Physical | V | Mode | Name    | wPi | BCM |
      +-----+-----+---------+------+---+---Pi 2---+---+------+---------+-----+-----+
-
-    ADS1256 COMMANDS
-    WAKEUP Completes SYNC and Exits Standby Mode 0000 0000 (00h)
-    RDATA Read Data 0000 0001 (01h)
-    RDATAC Read Data Continuously 0000 0011 (03h)
-    SDATAC Stop Read Data Continuously 0000 1111 (0Fh)
-    done - RREG Read from REG rrr 0001 rrrr (1xh) 0000 nnnn
-    done - WREG Write to REG rrr 0101 rrrr (5xh) 0000 nnnn
-    SELFCAL Offset and Gain Self-Calibration 1111 0000 (F0h)
-    SELFOCAL Offset Self-Calibration 1111 0001 (F1h)
-    SELFGCAL Gain Self-Calibration 1111 0010 (F2h)
-    SYSOCAL System Offset Calibration 1111 0011 (F3h)
-    SYSGCAL System Gain Calibration 1111 0100 (F4h)
-    SYNC Synchronize the A/D Conversion 1111 1100 (FCh)
-    STANDBY Begin Standby Mode 1111 1101 (FDh)
-    RESET Reset to Power-Up Values 1111 1110 (FEh)
-    WAKEUP Completes SYNC and Exits Standby Mode 1111 1111 (FFh)
     """
-    INPUT = 0
-    OUTPUT = 1
 
+    # These options can be adjusted to facilitate specific operation of the
+    # ADS1256, the defaults are designed to be compatible with the Waveforms
+    # High Precision AD/DA board
+    SPI_MODE        = 1
+    SPI_CHANNEL     = 0
+    SPI_FREQUENCY   = 1000000 # The ADS1256 supports 768kHz to 1.92MHz
+    DRDY_TIMEOUT    = 0.5 # Seconds to wait for DRDY when communicating
+    DATA_TIMEOUT    = 0.00001 # 10uS delay for sending data
+    SCLK_FREQUENCY  = 7680000 # default clock rate is 7.68MHz
 
-    SPI_BIT_ORDER       = True
-    SPI_MODE            = 0b00
-    DRDY_TIMEOUT        = 0.5 # Seconds to wait for DRDY when communicating
-    DATA_TIMEOUT        = 0.00001 # 10uS delay for sending data
-    SCLK_FREQUENCY      = 7680000 # default clock rate is 7.68MHz
-
-    # ADS Chip State
-    CURRENT_GAIN    = -1
-    CURRENT_DRATE   = -1
+    # The RPI GPIO to use for chip select and ready polling
+    CS_PIN      = 15 
+    DRDY_PIN    = 11
+    RESET_PIN   = 12
+    PDWN_PIN    = 13
 
     # Register addresses
-    REG_STATUS  = 0
-    REG_MUX     = 1
-    REG_ADCON   = 2
-    REG_DRATE   = 3
-    REG_IO      = 4
-    REG_OFC0    = 5
-    REG_OFC1    = 6
-    REG_OFC2    = 7
-    REG_FSC0    = 8 
-    REG_FSC1    = 9
-    REG_FSC2    = 10
-=======
-import spidev
-import RPi.GPIO as GPIO
-
-spi = null
-"""
-
-This is a list of the commands accepted by the ADS1256
-
-WAKEUP Completes SYNC and Exits Standby Mode 0000 0000 (00h)
-RDATA Read Data 0000 0001 (01h)
-RDATAC Read Data Continuously 0000 0011 (03h)
-SDATAC Stop Read Data Continuously 0000 1111 (0Fh)
-done - RREG Read from REG rrr 0001 rrrr (1xh) 0000 nnnn
-done - WREG Write to REG rrr 0101 rrrr (5xh) 0000 nnnn
-SELFCAL Offset and Gain Self-Calibration 1111 0000 (F0h)
-SELFOCAL Offset Self-Calibration 1111 0001 (F1h)
-SELFGCAL Gain Self-Calibration 1111 0010 (F2h)
-SYSOCAL System Offset Calibration 1111 0011 (F3h)
-SYSGCAL System Gain Calibration 1111 0100 (F4h)
-SYNC Synchronize the A/D Conversion 1111 1100 (FCh)
-STANDBY Begin Standby Mode 1111 1101 (FDh)
-RESET Reset to Power-Up Values 1111 1110 (FEh)
-WAKEUP Completes SYNC and Exits Standby Mode 1111 1111 (FFh)
-"""
-
-# The RPI GPIO to use for chip select and ready polling
-CS                  = 15 
-DRDY                = 11
-SPI_BIT_ORDER       = True
-SPI_MODE            = 0b00
-DRDY_TIMEOUT        = 0.5 # Seconds to wait for DRDY when communicating
-DATA_TIMEOUT        = 0.00001 # 10uS delay for sending data
-SCLK_FREQUENCY      = 7680000 # default clock rate is 7.68MHz
-
-# ADS Chip State
-CURRENT_GAIN    = -1
-CURRENT_DRATE   = -1
-
-# Register addresses
-REG_STATUS  = 0
-REG_MUX     = 1
-REG_ADCON   = 2
-REG_DRATE   = 3
-REG_IO      = 4
-REG_OFC0    = 5
-REG_OFC1    = 6
-REG_OFC2    = 7
-REG_FSC0    = 8 
-REG_FSC1    = 9
-REG_FSC2    = 10
-
-"""
-DRATE Register: A/D Data Rate Address 0x03 The 16 valid Data Rate settings are shown below. Make sure to select a
-valid setting as the invalid settings may produce unpredictable results.
-
-Bits 7-0 DR[7: 0]: Data Rate Setting(1)
-
-    11110000 = 30,000SPS (default)
-    11100000 = 15,000SPS
-    11010000 = 7,500SPS
-    11000000 = 3,750SPS
-    10110000 = 2,000SPS
-    10100001 = 1,000SPS
-    10010010 = 500SPS
-    10000010 = 100SPS
-    01110010 = 60SPS
-    01100011 = 50SPS
-    01010011 = 30SPS
-    01000011 = 25SPS
-    00110011 = 15SPS
-    00100011 = 10SPS
-    00010011 = 5SPS
-    00000011 = 2.5SPS
-
-    (1) for fCLKIN = 7.68MHz. Data rates scale linearly with fCLKIN
-"""
-# Data rates
-DRATE_30000     = 0b11110000 # 30,000SPS (default)
-DRATE_15000     = 0b11100000 # 15,000SPS
-DRATE_7500      = 0b11010000 # 7,500SPS
-DRATE_3750      = 0b11000000 # 3,750SPS
-DRATE_2000      = 0b10110000 # 2,000SPS
-DRATE_1000      = 0b10100001 # 1,000SPS
-DRATE_500       = 0b10010010 # 500SPS
-DRATE_100       = 0b10000010 # 100SPS
-DRATE_60        = 0b01110010 # 60SPS
-DRATE_50        = 0b01100011 # 50SPS
-DRATE_30        = 0b01010011 # 30SPS
-DRATE_25        = 0b01000011 # 25SPS
-DRATE_15        = 0b00110011 # 15SPS
-DRATE_10        = 0b00100011 # 10SPS
-DRATE_5         = 0b00010011 # 5SPS
-DRATE_2_5       = 0b00000011 # 2.5SPS
-
-# Commands
-CMD_WAKEUP  = 0x00 # Completes SYNC and exits standby mode
-CMD_RDATA   = 0x01 # Read data
-CMD_RDATAC  = 0x03 # Start read data continuously
-CMD_SDATAC  = 0x0F # Stop read data continuously
-CMD_RREG    = 0x10 # Read from register
-CMD_WREG    = 0x50 # Write to register
-CMD_SELFCAL = 0xF0 # Offset and gain self-calibration
-CMD_SELFOCAL= 0xF1 # Offset self-calibration
-CMD_SELFGCAL= 0xF2 # Gain self-calibration
-CMD_SYSOCAL = 0xF3 # System offset calibration
-CMD_SYSGCAL = 0xF4 # System gain calibration
-CMD_SYNC    = 0xFC # Synchronize the A/D conversion
-CMD_STANDBY = 0xFD # Begin standby mode
-CMD_RESET   = 0xFE # Reset to power-on values
-
-"""
-Status Register Configuration - logically OR all desired options together
-to form a 1 byte command and write it to the STATUS register
-
-STATUS REGISTER - ADDRESS 0x00
-Bits 7-4 ID3, ID2, ID1, ID0 Factory Programmed Identification Bits 
-(Read Only)
-
-Bit 3 ORDER: Data Output Bit Order
-
-    0 = Most Significant Bit First (default)
-    1 = Least Significant Bit First
-
-    Input data is always shifted in most significant byte and bit first.
-    Output data is always shifted out most significant byte first. The
-    ORDER bit only controls the bit order of the output data within the
-    byte.
-
-Bit 2 ACAL: Auto-Calibration
-
-    0 = Auto-Calibration Disabled (default)
-    1 = Auto-Calibration Enabled
-
-    When Auto-Calibration is enabled, self-calibration begins at the
-    completion of the WREG command that changes the PGA (bits 0-2 of ADCON
-    register), DR (bits 7-0 in the DRATE register) or BUFEN (bit 1 in the
-    STATUS register) values.
-
-Bit 1 BUFEN: Analog Input Buffer Enable
-
-    0 = Buffer Disabled (default)
-    1 = Buffer Enabled
-
-Bit 0 DRDY: Data Ready (Read Only)
-
-    This bit duplicates the state of the DRDY pin, which is inverted logic.
-"""
-STATUS_BUFFER_ENABLE    = 0x02
-STATUS_AUTOCAL_ENABLE   = 0x04
-STATUS_ORDER_LSB        = 0x08
-
-
-"""
-A/D Control Register - Address 0x02
-
-Bit 7 Reserved, always 0 (Read Only)
-
-Bits 6-5 CLK1, CLK0: D0/CLKOUT Clock Out Rate Setting
-
-    00 = Clock Out OFF
-    01 = Clock Out Frequency = fCLKIN (default)
-    10 = Clock Out Frequency = fCLKIN/2
-    11 = Clock Out Frequency = fCLKIN/4
-
-    When not using CLKOUT, it is recommended that it be turned off. These
-    bits can only be reset using the RESET pin.
-
-Bits 4-3 SDCS1, SCDS0: Sensor Detect Current Sources
-
-    00 = Sensor Detect OFF (default)
-    01 = Sensor Detect Current = 0.5uA
-    10 = Sensor Detect Current = 2uA
-    11 = Sensor Detect Current = 10uA
-
-    The Sensor Detect Current Sources can be activated to verify the
-    integrity of an external sensor supplying a signal to the ADS1255/6.
-    A shorted sensor produces a very small signal while an open-circuit
-    sensor produces a very large signal.
-
-Bits 2-0 PGA2, PGA1, PGA0: Programmable Gain Amplifier Setting
-    000 = 1 (default)
-    001 = 2
-    010 = 4
-    011 = 8
-    100 = 16
-    101 = 32
-    110 = 64
-    111 = 64
-"""
-# Gain levels
-AD_GAIN_1      = 0x00
-AD_GAIN_2      = 0x01
-AD_GAIN_4      = 0x02
-AD_GAIN_8      = 0x03
-AD_GAIN_16     = 0x04
-AD_GAIN_32     = 0x05
-AD_GAIN_64     = 0x06
-
-# Sensor Detect Current Sources
-AD_SDCS_500pA   = 0x08
-AD_SDCS_2uA     = 0x10
-AD_SDCS_10uA    = 0x18
->>>>>>> c99d3783c8890785d4f2443fd90043f7b1c75dc9
+    REG_STATUS  = 0x00
+    REG_MUX     = 0x01
+    REG_ADCON   = 0x02
+    REG_DRATE   = 0x03
+    REG_IO      = 0x04
+    REG_OFC0    = 0x05
+    REG_OFC1    = 0x06
+    REG_OFC2    = 0x07
+    REG_FSC0    = 0x08
+    REG_FSC1    = 0x09
+    REG_FSC2    = 0x0A
+    NUM_REG     = 11
 
     """
-    DRATE Register: A/D Data Rate Address 0x03 The 16 valid Data Rate settings are
-    shown below. Make sure to select a valid setting as the invalid settings may
-    produce unpredictable results.
+    DRATE Register: A/D Data Rate Address 0x03 The 16 valid Data Rate settings are shown below. Make sure to select a
+    valid setting as the invalid settings may produce unpredictable results.
 
     Bits 7-0 DR[7: 0]: Data Rate Setting(1)
 
@@ -304,7 +86,7 @@ AD_SDCS_10uA    = 0x18
 
         (1) for fCLKIN = 7.68MHz. Data rates scale linearly with fCLKIN
     """
-    # Data rates
+    # sample rates
     DRATE_30000     = 0b11110000 # 30,000SPS (default)
     DRATE_15000     = 0b11100000 # 15,000SPS
     DRATE_7500      = 0b11010000 # 7,500SPS
@@ -388,24 +170,24 @@ AD_SDCS_10uA    = 0x18
     Bits 6-5 CLK1, CLK0: D0/CLKOUT Clock Out Rate Setting
 
         00 = Clock Out OFF
-        01 = Clock Out Frequency = fCLKIN (default)
-        10 = Clock Out Frequency = fCLKIN/2
-        11 = Clock Out Frequency = fCLKIN/4
+    01 = Clock Out Frequency = fCLKIN (default)
+    10 = Clock Out Frequency = fCLKIN/2
+    11 = Clock Out Frequency = fCLKIN/4
 
-        When not using CLKOUT, it is recommended that it be turned off. These
-        bits can only be reset using the RESET pin.
+    When not using CLKOUT, it is recommended that it be turned off. These
+    bits can only be reset using the RESET pin.
 
     Bits 4-3 SDCS1, SCDS0: Sensor Detect Current Sources
 
-        00 = Sensor Detect OFF (default)
-        01 = Sensor Detect Current = 0.5uA
-        10 = Sensor Detect Current = 2uA
-        11 = Sensor Detect Current = 10uA
+    00 = Sensor Detect OFF (default)
+    01 = Sensor Detect Current = 0.5uA
+    10 = Sensor Detect Current = 2uA
+    11 = Sensor Detect Current = 10uA
 
-        The Sensor Detect Current Sources can be activated to verify the
-        integrity of an external sensor supplying a signal to the ADS1255/6.
-        A shorted sensor produces a very small signal while an open-circuit
-        sensor produces a very large signal.
+    The Sensor Detect Current Sources can be activated to verify the
+    integrity of an external sensor supplying a signal to the ADS1255/6.
+    A shorted sensor produces a very small signal while an open-circuit
+    sensor produces a very large signal.
 
     Bits 2-0 PGA2, PGA1, PGA0: Programmable Gain Amplifier Setting
         000 = 1 (default)
@@ -437,32 +219,34 @@ AD_SDCS_10uA    = 0x18
     AD_CLK_FOURTH   = 0x60
 
     # The RPI GPIO to use for chip select and ready polling
-    def __init__(self, drdy=11, reset=12, pdwn=13, cs=15)
+    def __init__(self):
         # Set up the wiringpi object to use physical pin numbers
         wp.wiringPiSetupPhys()
 
         # Initialize the DRDY pin
-        DRDY_PIN            = 11
-        wp.pinMode(DRDY_PIN, self.INPUT)
+        wp.pinMode(self.DRDY_PIN, wp.INPUT)
 
         # Initialize the reset pin
-        RESET_PIN           = 12
-        wp.pinMode(RESET_PIN, self.OUTPUT)
+        wp.pinMode(self.RESET_PIN, wp.OUTPUT)
+        wp.digitalWrite(self.RESET_PIN, wp.HIGH)
 
         # Initialize PDWN pin
-        PDWN_PIN            = 13
-        wp.pinMode(PDWN_PIN, OUTPUT)
+        wp.pinMode(self.PDWN_PIN, wp.OUTPUT)
+        wp.digitalWrite(self.PDWN_PIN, wp.HIGH)
 
         # Initialize CS pin
-        CS_PIN              = 15
-        wp.pinMode(CS_PIN, OUTPUT)
+        wp.pinMode(self.CS_PIN, wp.OUTPUT)
+        wp.digitalWrite(self.CS_PIN, wp.HIGH)
+
+        # Initialize the wiringpi SPI setup
+        wp.wiringPiSPISetup(self.SPI_CHANNEL, self.SPI_FREQUENCY) 
 
 
     def chip_select(self):
-        wiringpi2.
+        wp.digitalWrite(self.CS_PIN, wp.LOW)
 
     def chip_release(self):
-        spi.close()
+        wp.digitalWrite(self.CS_PIN, wp.HIGH)
 
     def WaitDRDY(self):
         """
@@ -472,9 +256,10 @@ AD_SDCS_10uA    = 0x18
         elapsed = time.time() - start
 
         # Waits for DRDY to go to zero or TIMEOUT seconds to pass
-        drdy_level = wp.digitalRead(DRDY_PIN)
-        while drdy_level and elapsed < DRDY_TIMEOUT:
+        drdy_level = wp.digitalRead(self.DRDY_PIN)
+        while (drdy_level == wp.HIGH) and (elapsed < self.DRDY_TIMEOUT):
             elapsed = time.time() - start
+            drdy_level = wp.digitalRead(self.DRDY_PIN)
 
         if elapsed >= DRDY_TIMEOUT:
             print("WaitDRDY() Timeout\r\n")
@@ -483,14 +268,14 @@ AD_SDCS_10uA    = 0x18
         """
         Sends a byte to the SPI bus
         """
-        spi.writebytes(chr(byte))
+        wp.wiringPiSPIDataRW(byte)
 
     def ReadByte(self):
         """
         Reads a byte from the SPI bus
         :returns: byte read from the bus
         """
-        byte = spi.readbytes(1)
+        byte = wp.wiringPiSPIDataRW()
         return byte
 
     def DataDelay(self):
@@ -504,14 +289,14 @@ AD_SDCS_10uA    = 0x18
         bus must be minimum 50x SCLK period, this function reads data after
         60 x SCLK period.
         """
-        timeout = (60 / SCLK_FREQUENCY)
+        timeout = (60 / self.SCLK_FREQUENCY)
 
 
         start = time.time()
         elapsed = time.time() - start
 
         # Wait for TIMEOUT to elapse
-        while elapsed < DATA_TIMEOUT:
+        while elapsed < self.DATA_TIMEOUT:
             elapsed = time.time() - start
 
 
@@ -538,20 +323,20 @@ AD_SDCS_10uA    = 0x18
         result = []
 
         # Pull the SPI bus low
-        chip_select()
+        self.chip_select()
         
         # Send the byte command
-        SendByte(CMD_RREG | reg)
-        SendByte(0x00)
+        self.SendByte(self.CMD_RREG | reg)
+        self.SendByte(0x00)
 
         # Wait for appropriate data delay
-        DataDelay()
+        self.DataDelay()
 
         # Read the register contents
-        read = ReadByte()
+        read = self.ReadByte()
 
         # Release the SPI bus
-        chip_release()
+        self.chip_release()
 
         return read
 
@@ -576,19 +361,19 @@ AD_SDCS_10uA    = 0x18
         """
 
         # Select the ADS chip
-        chip_select()
+        self.chip_select()
 
         # Tell the ADS chip which register to start writing at
-        SendByte(CMD_WREG | register)
+        self.SendByte(CMD_WREG | register)
 
         # Tell the ADS chip how many additional registers to write
-        SendByte(0x00)
+        self.SendByte(0x00)
 
         # Send the data
-        SendByte(data)
+        self.SendByte(data)
 
         # Release the ADS chip
-        chip_release()
+        self.chip_release()
 
     def ReadADC(self):
         """
@@ -605,24 +390,24 @@ AD_SDCS_10uA    = 0x18
         """
 
         # Pull the SPI bus low
-        chip_select()
+        self.chip_select()
 
         # Wait for data to be ready
-        WaitDRDY()
+        self.WaitDRDY()
 
         # Send the read command
-        SendByte(CMD_RDATA)
+        self.SendByte(CMD_RDATA)
         
         # Wait through the data pause
-        DataDelay()
+        self.DataDelay()
 
         # The result is 24 bits
-        result.append(ReadByte())
-        result.append(ReadByte())
-        result.append(ReadByte())
+        result.append(self.ReadByte())
+        result.append(self.ReadByte())
+        result.append(self.ReadByte())
 
         # Release the SPI bus
-        chip_release()
+        self.chip_release()
 
         # Concatenate the bytes
         total  = (result[0] << 16)
@@ -637,6 +422,6 @@ AD_SDCS_10uA    = 0x18
         Read the ID from the ADS chip
         :returns: numeric identifier of the ADS chip
         """
-        WaitDRDY()
-        id = ReadReg(REG_STATUS)
-        return (id >> 4)
+        self.WaitDRDY()
+        myid = self.ReadReg(self.REG_STATUS)
+        return (myid >> 4)
