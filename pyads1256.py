@@ -1,6 +1,7 @@
 import time
 import wiringpi2 as wp
 
+
 class ADS1256:
     """ Wiring Diagram
      +-----+-----+---------+------+---+---Pi 2---+---+------+---------+-----+-----+
@@ -264,7 +265,7 @@ class ADS1256:
         if elapsed >= DRDY_TIMEOUT:
             print("WaitDRDY() Timeout\r\n")
 
-    def SendByte(self, byte):
+    def SendByte(self, data, size):
         """
         Sends a byte to the SPI bus
         """
