@@ -1,6 +1,10 @@
 import time
 import wiringpi2 as wp
 
+def debug_print(string):
+    if True:
+        print("DEBUG: " + string)
+
 
 class ADS1256:
     """ Wiring Diagram
@@ -36,7 +40,7 @@ class ADS1256:
     # ADS1256, the defaults are designed to be compatible with the Waveforms
     # High Precision AD/DA board
     SPI_MODE        = 1
-    SPI_CHANNEL     = 0
+    SPI_CHANNEL     = 1
     SPI_FREQUENCY   = 1000000 # The ADS1256 supports 768kHz to 1.92MHz
     DRDY_TIMEOUT    = 0.5 # Seconds to wait for DRDY when communicating
     DATA_TIMEOUT    = 0.00001 # 10uS delay for sending data
@@ -240,7 +244,8 @@ class ADS1256:
         wp.digitalWrite(self.CS_PIN, wp.HIGH)
 
         # Initialize the wiringpi SPI setup
-        wp.wiringPiSPISetup(self.SPI_CHANNEL, self.SPI_FREQUENCY) 
+        spi_success = wp.wiringPiSPISetup(self.SPI_CHANNEL, self.SPI_FREQUENCY) 
+        debug_print("SPI success " + str(spi_success))
 
 
     def chip_select(self):
@@ -262,21 +267,25 @@ class ADS1256:
             elapsed = time.time() - start
             drdy_level = wp.digitalRead(self.DRDY_PIN)
 
-        if elapsed >= DRDY_TIMEOUT:
+        if elapsed >= self.DRDY_TIMEOUT:
             print("WaitDRDY() Timeout\r\n")
 
-    def SendByte(self, data, size):
+    def SendByte(self, byte):
         """
         Sends a byte to the SPI bus
         """
-        wp.wiringPiSPIDataRW(byte)
+        debug_print("Entered SendByte")
+        debug_print("Sending: " + str(byte))
+        data = chr(byte)
+        result = wp.wiringPiSPIDataRW(self.SPI_CHANNEL, data)
+        debug_print("Read " + str(data))
 
     def ReadByte(self):
         """
         Reads a byte from the SPI bus
         :returns: byte read from the bus
         """
-        byte = wp.wiringPiSPIDataRW()
+        byte = wp.wiringPiSPIDataRW(self.SPI_CHANNEL, chr(0x00))
         return byte
 
     def DataDelay(self):
@@ -327,7 +336,7 @@ class ADS1256:
         self.chip_select()
         
         # Send the byte command
-        self.SendByte(self.CMD_RREG | reg)
+        self.SendByte(self.CMD_RREG | start_reg)
         self.SendByte(0x00)
 
         # Wait for appropriate data delay
@@ -424,5 +433,5 @@ class ADS1256:
         :returns: numeric identifier of the ADS chip
         """
         self.WaitDRDY()
-        myid = self.ReadReg(self.REG_STATUS)
+        myid = self.ReadReg(self.REG_STATUS, 1)
         return (myid >> 4)

@@ -1,6 +1,6 @@
-import PyADS1256
+import pyads1256
 
-ads = PyADS1256.ADS1256()
+ads = pyads1256.ADS1256()
 
 myid = ads.ReadID()
 
